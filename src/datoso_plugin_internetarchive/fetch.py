@@ -25,7 +25,6 @@ def download_dats(archive, folder_helper, preffix):
         nonlocal done
         filename = Path(href).name
         href = href.replace(" ", "%20")
-        print(f'Downloading {href}')
         tmp_filename, _ = urllib.request.urlretrieve(href)
         local_filename = os.path.join(folder_helper.dats, filename)
         shutil.move(tmp_filename, local_filename)
@@ -45,7 +44,7 @@ def download_dats(archive, folder_helper, preffix):
     total_dats = len(dats)
 
     def print_progress(done):
-        print(f' {done}/{total_dats} ({round(done/total_dats*100, 2)}%)', end='\r')
+        print(f'  {done}/{total_dats} ({round(done/total_dats*100, 2)}%)', end='\r')
 
     # download_dat(os.path.join(ia.get_download_path(), dats[0]['name']))
 
