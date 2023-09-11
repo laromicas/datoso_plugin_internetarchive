@@ -3,14 +3,13 @@
 from datetime import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
-import shutil
 import zipfile
 from pathlib import Path
 
-import urllib.request
-
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
+from datoso.helpers import downloader
 from datoso.configuration.folder_helper import Folders
+from datoso.configuration import config
 
 
 MAIN_URL = 'http://archive.org'
@@ -25,9 +24,9 @@ def download_dats(archive, folder_helper, preffix):
         nonlocal done
         filename = Path(href).name
         href = href.replace(" ", "%20")
-        tmp_filename, _ = urllib.request.urlretrieve(href)
         local_filename = os.path.join(folder_helper.dats, filename)
-        shutil.move(tmp_filename, local_filename)
+        downloader(url=href, destination=local_filename, reporthook=None)
+
         with zipfile.ZipFile(local_filename, 'r') as zip_ref:
             zip_ref.extractall(folder_helper.dats)
         os.remove(local_filename)
@@ -39,19 +38,16 @@ def download_dats(archive, folder_helper, preffix):
 
     print('Downloading new dats')
     dats = list(ia.files_from_folder(archive.dat_folder))
-    # print(dats)
-    # exit()
     total_dats = len(dats)
 
     def print_progress(done):
         print(f'  {done}/{total_dats} ({round(done/total_dats*100, 2)}%)', end='\r')
 
-    # download_dat(os.path.join(ia.get_download_path(), dats[0]['name']))
-
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        for file in dats:
-            # print(download_dat, ia.get_download_path(), file['name'])
-            future = executor.submit(download_dat, os.path.join(ia.get_download_path(), file['name']))
+    with ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
+        futures = [
+            executor.submit(download_dat, os.path.join(ia.get_download_path(), file['name'])) for file in dats
+        ]
+        for future in futures:
             future.result()
 
     print('\nZipping files for backup')
