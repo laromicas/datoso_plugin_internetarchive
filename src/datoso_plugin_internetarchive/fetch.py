@@ -5,6 +5,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import zipfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 from datoso.helpers import downloader
@@ -45,7 +46,7 @@ def download_dats(archive, folder_helper, preffix):
 
     with ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
         futures = [
-            executor.submit(download_dat, os.path.join(ia.get_download_path(), file['name'])) for file in dats
+            executor.submit(download_dat, urljoin(urljoin(ia.get_download_path(), archive.dat_folder), file['name'])) for file in dats
         ]
         for future in futures:
             future.result()

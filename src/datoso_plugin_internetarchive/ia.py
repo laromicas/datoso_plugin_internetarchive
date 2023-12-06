@@ -26,7 +26,7 @@ class InternetArchive:
 
     def get_download_path(self):
         """ Return the download path for files in InternetArchive item. """
-        self.path = f"https://{self.item.item_metadata['d1']}{self.item.item_metadata['dir']}"
+        self.path = f"https://{self.item.item_metadata['d1']}{self.item.item_metadata['dir']}/"
         return self.path
 
     def files_from_folder(self, folder):
