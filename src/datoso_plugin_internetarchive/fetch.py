@@ -5,13 +5,11 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import zipfile
 from pathlib import Path
-from urllib.parse import urljoin
 
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
-from datoso.helpers import downloader
 from datoso.configuration.folder_helper import Folders
 from datoso.configuration import config
-
+from datoso.helpers import RequestUtils, downloader
 
 MAIN_URL = 'http://archive.org'
 
@@ -46,7 +44,7 @@ def download_dats(archive, folder_helper, preffix):
 
     with ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
         futures = [
-            executor.submit(download_dat, urljoin(urljoin(ia.get_download_path(), archive.dat_folder), file['name'])) for file in dats
+            executor.submit(download_dat, RequestUtils.urljoin(ia.get_download_path(), file['name'])) for file in dats
         ]
         for future in futures:
             future.result()
@@ -57,8 +55,6 @@ def download_dats(archive, folder_helper, preffix):
         for root, dirs, files in os.walk(folder_helper.dats):
             for file in files:
                 zip_ref.write(os.path.join(root, file), arcname=os.path.join(root.replace(folder_helper.dats, ''), file), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
-
-
 
 def fetch_helper(archive: Archive, folder_helper: Folders, preffix, extras=[]):
     download_dats(archive, folder_helper, preffix)
