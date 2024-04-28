@@ -1,9 +1,9 @@
-"""
-    Internet Archive Repository
-"""
+"""Internet Archive Repository"""
 from dataclasses import dataclass
-import os
+from pathlib import Path
+
 from internetarchive import get_item
+
 
 @dataclass
 class Archive:
@@ -11,8 +11,9 @@ class Archive:
     item: str = None
 
 class InternetArchive:
-    """ Internet Archive Wrapper. """
-    dirs = set()
+    """Internet Archive Wrapper."""
+
+    dirs: set | None = None
     path: str = None
 
     def __init__(self, url):
@@ -20,35 +21,35 @@ class InternetArchive:
         self.get_item()
 
     def get_item(self):
-        """ Get the item from InternetArchive. """
+        """Get the item from InternetArchive."""
         self.item = get_item(self.url)
         return self.item
 
     def get_download_path(self):
-        """ Return the download path for files in InternetArchive item. """
+        """Return the download path for files in InternetArchive item."""
         self.path = f"https://{self.item.item_metadata['d1']}{self.item.item_metadata['dir']}/"
         return self.path
 
     def files_from_folder(self, folder):
-        """ Return a list of files in a folder. """
+        """Return a list of files in a folder."""
         files = self.item.item_metadata['files']
         for file in files:
             if file['name'].startswith(f'{folder}/') or (folder in ('','/') and '/' not in file['name']):
                 yield file
 
     def folders(self):
-        """ Return a list of folders in InternetArchive item. """
+        """Return a list of folders in InternetArchive item."""
         files = self.item.item_metadata['files']
+        if self.dirs is None:
+            self.dirs = set()
         for file in files:
-            self.dirs.add(f"{os.path.dirname(file['name'])}")
+            self.dirs.add(Path(file['name']).parent)
         return list(self.dirs)
 
 
-if __name__ == "__main__":
-    ia = InternetArchive("En-ROMs")
-    for i in ia.files_from_folder("DATs"):
+if __name__ == '__main__':
+    ia = InternetArchive('En-ROMs')
+    for i in ia.files_from_folder('DATs'):
         print(i['name'])
 
     print(ia.folders())
-    # , sizeof_fmt(i['size'])
-    # print(json.dumps(ia.item.item_metadata, indent=4))
