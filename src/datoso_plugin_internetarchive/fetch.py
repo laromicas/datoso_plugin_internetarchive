@@ -53,7 +53,7 @@ def download_dats(archive, folder_helper, prefix):
             future.result()
 
     print('\nZipping files for backup')
-    backup_daily_name = f'{preffx}-{datetime.now(tz.tzlocal()).strftime("%Y-%m-%d")}.zip'
+    backup_daily_name = f'{prefix}-{datetime.now(tz.tzlocal()).strftime("%Y-%m-%d")}.zip'
     with zipfile.ZipFile(folder_helper.backup / backup_daily_name, 'w') as zip_ref:
         for root, _, files in os.walk(folder_helper.dats):
             for file in files:
