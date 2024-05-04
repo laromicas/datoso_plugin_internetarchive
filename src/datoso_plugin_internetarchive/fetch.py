@@ -57,7 +57,8 @@ def download_dats(archive, folder_helper, prefix):
     with zipfile.ZipFile(folder_helper.backup / backup_daily_name, 'w') as zip_ref:
         for root, _, files in os.walk(folder_helper.dats):
             for file in files:
-                zip_ref.write(Path(root) / file, arcname=Path(root).relative_to(folder_helper.dats) / file, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+                zip_ref.write(Path(root) / file, arcname=Path(root).relative_to(folder_helper.dats) / file,
+                              compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 def fetch_helper(archive: Archive, folder_helper: Folders, prefix, extras=None): # noqa: ARG001
     # TODO(laromicas): Add support for extras
