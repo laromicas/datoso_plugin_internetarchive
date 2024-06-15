@@ -11,7 +11,7 @@ Datoso Plugin InternetArchive is a helper plugin for other seed plugins for dato
 
 ## Installation
 
-Datoso requires python 3.10+.
+Datoso requires python 3.11+.
 
 datoso_plugin_internetarchive will be installed automatically when a seed need it.
 
