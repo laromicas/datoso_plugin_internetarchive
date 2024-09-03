@@ -1,5 +1,6 @@
 """Fetch and download DAT files."""
 
+import logging
 import os
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,7 @@ from dateutil import tz
 
 from datoso.configuration import config
 from datoso.configuration.folder_helper import Folders
-from datoso.helpers import RequestUtils
+from datoso.helpers import Bcolors, RequestUtils
 from datoso.helpers.download import downloader
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 
@@ -25,8 +26,9 @@ def download_dats(archive: Archive, folder_helper: Folders, prefix: str) -> None
     """Download DAT files from Archive.org."""
     done = 0
 
-    def download_dat(href: str) -> None:
+    def download_dat_url(ia: InternetArchive, download_path: str) -> None:
         nonlocal done
+        href = RequestUtils.urljoin(ia.get_download_path(), download_path)
         filename = Path(href).name
         href = href.replace(' ', '%20')
         local_filename = folder_helper.dats / filename
@@ -37,6 +39,31 @@ def download_dats(archive: Archive, folder_helper: Folders, prefix: str) -> None
         Path(local_filename).unlink()
         done += 1
         print_progress(done)
+
+    def download_dat_ia(ia: InternetArchive, download_path: str) -> None:
+        # TODO(laromicas): Add support for IA download
+        nonlocal done
+        try:
+            ia.download_file(download_path, folder_helper.dats)
+        except Exception as e:
+            if('403' in str(e)):
+                logging.exception(
+                    '%s Error downloading %s, use "%sia configure%s" to set up your IA credentials %s',
+                    Bcolors.FAIL, download_path, Bcolors.OKBLUE, Bcolors.FAIL, Bcolors.ENDC)
+            else:
+                logging.exception(
+                    '%s Error downloading %s %s',
+                    Bcolors.FAIL, download_path, Bcolors.ENDC)
+
+        local_filename = folder_helper.dats / download_path
+        with zipfile.ZipFile(local_filename, 'r') as zip_ref:
+            zip_ref.extractall(folder_helper.dats)
+        Path(local_filename).unlink()
+        done += 1
+        print_progress(done)
+
+    downloader_function = download_dat_ia \
+        if config.getboolean('INTERNET_ARCHIVE','IADownloadUtility', fallback=True) else download_dat_url
 
     print('Fetching Archive.org DAT files')
     ia = InternetArchive(archive.item)
@@ -50,7 +77,7 @@ def download_dats(archive: Archive, folder_helper: Folders, prefix: str) -> None
 
     with ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
         futures = [
-            executor.submit(download_dat, RequestUtils.urljoin(ia.get_download_path(), file['name'])) for file in dats
+            executor.submit(downloader_function, ia, file['name']) for file in dats
         ]
         for future in futures:
             future.result()

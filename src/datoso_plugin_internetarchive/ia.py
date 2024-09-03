@@ -35,6 +35,10 @@ class InternetArchive:
         self.path = f'https://archive.org/download/{self.item.identifier}/'
         return self.path
 
+    def download_file(self, file: str, destdir: str) -> str:
+        """Return the download path for a file in InternetArchive item."""
+        return self.item.download(file, no_directory=True, destdir=destdir)
+
     def files_from_folder(self, folder: str) -> Iterator[str]:
         """Return a list of files in a folder."""
         files = self.item.item_metadata['files']
