@@ -12,7 +12,7 @@ from dateutil import tz
 
 from datoso.configuration import config
 from datoso.configuration.folder_helper import Folders
-from datoso.helpers import Bcolors, RequestUtils
+from datoso.helpers import Bcolors, FileUtils, RequestUtils
 from datoso.helpers.download import downloader
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 
@@ -81,6 +81,7 @@ def download_dats(archive: Archive, folder_helper: Folders, prefix: str) -> None
         ]
         for future in futures:
             future.result()
+    FileUtils.remove_empty_folders(folder_helper.dats)
 
     print('\nZipping files for backup')
     backup_daily_name = f'{prefix}-{datetime.now(tz.tzlocal()).strftime("%Y-%m-%d")}.zip'
