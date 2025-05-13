@@ -18,6 +18,7 @@ class InternetArchive:
 
     dirs: set | None = None
     path: str = None
+    allowed_extensions: list[str] = None
 
     def __init__(self, url: str) -> None:
         """Initialize the InternetArchive object."""
@@ -44,6 +45,8 @@ class InternetArchive:
         files = self.item.item_metadata['files']
         for file in files:
             if file['name'].startswith(f'{folder}/') or (folder in ('','/') and '/' not in file['name']):
+                if self.allowed_extensions and not any(file['name'].endswith(ext) for ext in self.allowed_extensions):
+                    continue
                 yield file
 
     def folders(self) -> list:
