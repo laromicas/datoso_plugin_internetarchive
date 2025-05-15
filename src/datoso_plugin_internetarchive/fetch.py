@@ -95,7 +95,7 @@ def fetch_helper(archive: Archive, folder_helper: Folders, prefix: str, extras: 
     # TODO(laromicas): Add support for extras
     print('Fetching Archive.org DAT files')
     ia = InternetArchive(archive.item)
-    if 'allowed_extensions' in extras:
+    if isinstance(extras, dict) and 'allowed_extensions' in extras:
         ia.allowed_extensions = extras['allowed_extensions']
 
     download_dats(ia, archive, folder_helper, prefix)
