@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from dateutil import tz
-
 from datoso.configuration import config
 from datoso.configuration.folder_helper import Folders
-from datoso.helpers import Bcolors
+from datoso.helpers import Bcolors, file_utils
 from datoso.helpers.download import downloader
-from datoso.helpers.file_utils import remove_empty_folders
+from datoso.helpers.file_utils import move_path, remove_empty_folders
 from datoso.helpers.request_utils import url_join
+
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 
 MAIN_URL = 'http://archive.org'
@@ -24,7 +24,7 @@ def get_archive_item(url: str) -> str:
     """Get the archive item from the URL."""
     return url.split('/')[-1]
 
-def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders, prefix: str) -> None:  # noqa: ARG001, ANN401
+def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders, prefix: str, *, backup: bool=True, backup_to_zip: bool=True) -> None:  # noqa: ARG001, ANN401
     """Download DAT files from Archive.org."""
     done = 0
 
@@ -60,7 +60,8 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
         local_filename = folder_helper.dats / download_path
         with zipfile.ZipFile(local_filename, 'r') as zip_ref:
             zip_ref.extractall(folder_helper.dats)
-        Path(local_filename).unlink()
+        if backup:
+            move_path(local_filename, folder_helper.backup / local_filename.name)
         done += 1
         print_progress(done)
 
@@ -83,6 +84,8 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
     remove_empty_folders(folder_helper.dats)
 
     print('\nZipping files for backup')
+    if not backup_to_zip:
+        return
     backup_daily_name = f'{prefix}-{datetime.now(tz.tzlocal()).strftime("%Y-%m-%d")}.zip'
     with zipfile.ZipFile(folder_helper.backup / backup_daily_name, 'w') as zip_ref:
         for root, _, files in os.walk(folder_helper.dats):
@@ -90,12 +93,16 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
                 zip_ref.write(Path(root) / file, arcname=Path(root).relative_to(folder_helper.dats) / file,
                               compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
-def fetch_helper(archive: Archive, folder_helper: Folders, prefix: str, extras: Any=None) -> None: # noqa: ARG001, ANN401
+def fetch_helper(archive: Archive, folder_helper: Folders, prefix: str, extras: Any=None, *, backup: bool=True, backup_to_zip: bool=True) -> None:  # noqa: ANN401, ARG001, PLR0913
     """Fetch and download DAT files."""
     # TODO(laromicas): Add support for extras
     print('Fetching Archive.org DAT files')
     ia = InternetArchive(archive.item)
     if isinstance(extras, dict) and 'allowed_extensions' in extras:
         ia.allowed_extensions = extras['allowed_extensions']
+    if isinstance(extras, dict) and 'excluded_patterns' in extras:
+        ia.excluded_patterns = extras['excluded_patterns']
+    if isinstance(extras, dict) and 'latest_only' in extras:
+        ia.latest_only = extras['latest_only']
 
-    download_dats(ia, archive, folder_helper, prefix)
+    download_dats(ia, archive, folder_helper, prefix, backup=backup, backup_to_zip=backup_to_zip)

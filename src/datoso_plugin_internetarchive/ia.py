@@ -1,6 +1,7 @@
 """Internet Archive Repository."""
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from internetarchive import Item, get_item
@@ -19,6 +20,8 @@ class InternetArchive:
     dirs: set | None = None
     path: str = None
     allowed_extensions: list[str] = None
+    excluded_patterns: list[str] = None
+    latest_only: bool = False
 
     def __init__(self, url: str) -> None:
         """Initialize the InternetArchive object."""
@@ -40,14 +43,50 @@ class InternetArchive:
         """Return the download path for a file in InternetArchive item."""
         return self.item.download(file, no_directory=True, destdir=destdir)
 
+    @staticmethod
+    def _matches_folder(file_name: str, folder: str) -> bool:
+        """Return whether a file belongs to the requested folder."""
+        return file_name.startswith(f'{folder}/') or (folder in ('', '/') and '/' not in file_name)
+
+    @staticmethod
+    def _file_sort_key(file: dict) -> tuple[float, str]:
+        """Return a stable key that prefers the newest file metadata available."""
+        for metadata_key in ('mtime', 'updatedate', 'created', 'addeddate', 'publicdate'):
+            value = file.get(metadata_key)
+            if value is None:
+                continue
+            if isinstance(value, int | float):
+                return float(value), file['name']
+            if isinstance(value, str):
+                normalized_value = value.strip()
+                if not normalized_value:
+                    continue
+                try:
+                    return float(normalized_value), file['name']
+                except ValueError:
+                    try:
+                        return datetime.fromisoformat(normalized_value).timestamp(), file['name']
+                    except ValueError:
+                        continue
+        return 0.0, file['name']
+
     def files_from_folder(self, folder: str) -> Iterator[str]:
         """Return a list of files in a folder."""
-        files = self.item.item_metadata['files']
-        for file in files:
-            if file['name'].startswith(f'{folder}/') or (folder in ('','/') and '/' not in file['name']):
-                if self.allowed_extensions and not any(file['name'].endswith(ext) for ext in self.allowed_extensions):
-                    continue
-                yield file
+        filtered_files = []
+        for file in self.item.item_metadata['files']:
+            if not self._matches_folder(file['name'], folder):
+                continue
+            if self.allowed_extensions and not any(file['name'].endswith(ext) for ext in self.allowed_extensions):
+                continue
+            if self.excluded_patterns and any(pattern in file['name'] for pattern in self.excluded_patterns):
+                continue
+            filtered_files.append(file)
+
+        if self.latest_only and filtered_files:
+            yield max(filtered_files, key=self._file_sort_key)
+            return
+
+        yield from filtered_files
 
     def folders(self) -> list:
         """Return a list of folders in InternetArchive item."""
