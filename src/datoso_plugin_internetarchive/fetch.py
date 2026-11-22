@@ -11,7 +11,7 @@ from typing import Any
 from dateutil import tz
 from datoso.configuration import config
 from datoso.configuration.folder_helper import Folders
-from datoso.helpers import Bcolors, file_utils
+from datoso.helpers import Bcolors
 from datoso.helpers.download import downloader
 from datoso.helpers.file_utils import move_path, remove_empty_folders
 from datoso.helpers.request_utils import url_join
