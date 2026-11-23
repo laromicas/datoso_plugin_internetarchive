@@ -15,10 +15,42 @@ from datoso.helpers import Bcolors
 from datoso.helpers.download import downloader
 from datoso.helpers.file_utils import move_path, remove_empty_folders
 from datoso.helpers.request_utils import url_join
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+from rich.text import Text
 
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 
 MAIN_URL = 'http://archive.org'
+
+
+class FileSizeColumn(DownloadColumn):
+    """Downloaded/total size, only for file tasks."""
+
+    def render(self, task):  # noqa: ANN001, ANN201, D102
+        return super().render(task) if task.fields.get('file') else Text('')
+
+
+def download_progress() -> Progress:
+    """Rich progress for DAT downloads: one bar per file, plus the overall count."""
+    return Progress(
+        TextColumn('{task.description}'), BarColumn(), TaskProgressColumn(), FileSizeColumn(), SpeedColumn(),
+        TimeRemainingColumn(),
+    )
+
+
+class SpeedColumn(TransferSpeedColumn):
+    """Transfer speed, only for file tasks."""
+
+    def render(self, task):  # noqa: ANN001, ANN201, D102
+        return super().render(task) if task.fields.get('file') else Text('')
 
 def get_archive_item(url: str) -> str:
     """Get the archive item from the URL."""
@@ -43,10 +75,9 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
         print_progress(done)
 
     def download_dat_ia(ia: InternetArchive, download_path: str) -> None:
-        # TODO(laromicas): Add support for IA download
         nonlocal done
         try:
-            ia.download_file(download_path, folder_helper.dats)
+            ia.download_file(download_path, folder_helper.dats, progress, keep=total_dats == 1)
         except Exception as e:
             if('403' in str(e)):
                 logging.exception(
@@ -73,9 +104,11 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
     total_dats = len(dats)
 
     def print_progress(done: int) -> None:
-        print(f'  {done}/{total_dats} ({round(done/total_dats*100, 2)}%)', end='\r')
+        progress.update(overall, completed=done)
 
-    with ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
+    progress = download_progress()
+    with progress, ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
+        overall = progress.add_task(f'{total_dats} DAT file(s)', total=total_dats, visible=total_dats > 1)
         futures = [
             executor.submit(downloader_function, ia, file['name']) for file in dats
         ]
