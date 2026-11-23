@@ -12,46 +12,14 @@ from dateutil import tz
 from datoso.configuration import config
 from datoso.configuration.folder_helper import Folders
 from datoso.helpers import Bcolors
-from datoso.helpers.download import downloader
+from datoso.helpers.download import DownloadProgress, downloader
 from datoso.helpers.file_utils import move_path, remove_empty_folders
 from datoso.helpers.request_utils import url_join
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    TaskProgressColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
-from rich.text import Text
 
 from datoso_plugin_internetarchive.ia import Archive, InternetArchive
 
 MAIN_URL = 'http://archive.org'
 
-
-class FileSizeColumn(DownloadColumn):
-    """Downloaded/total size, only for file tasks."""
-
-    def render(self, task):  # noqa: ANN001, ANN201, D102
-        return super().render(task) if task.fields.get('file') else Text('')
-
-
-def download_progress() -> Progress:
-    """Rich progress for DAT downloads: one bar per file, plus the overall count. Hidden when quiet."""
-    return Progress(
-        TextColumn('{task.description}'), BarColumn(), TaskProgressColumn(), FileSizeColumn(), SpeedColumn(),
-        TimeRemainingColumn(),
-        disable=config.getboolean('COMMAND', 'Quiet', fallback=False),
-    )
-
-
-class SpeedColumn(TransferSpeedColumn):
-    """Transfer speed, only for file tasks."""
-
-    def render(self, task):  # noqa: ANN001, ANN201, D102
-        return super().render(task) if task.fields.get('file') else Text('')
 
 def get_archive_item(url: str) -> str:
     """Get the archive item from the URL."""
@@ -59,26 +27,20 @@ def get_archive_item(url: str) -> str:
 
 def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders, prefix: str, *, backup: bool=True, backup_to_zip: bool=True) -> None:  # noqa: ARG001, ANN401
     """Download DAT files from Archive.org."""
-    done = 0
-
     def download_dat_url(ia: InternetArchive, download_path: str) -> None:
-        nonlocal done
         href = url_join(ia.get_download_path(), download_path)
         filename = Path(href).name
         href = href.replace(' ', '%20')
         local_filename = folder_helper.dats / filename
-        downloader(url=href, destination=local_filename, reporthook=None)
+        downloader(url=href, destination=local_filename, progress=progress)
 
         with zipfile.ZipFile(local_filename, 'r') as zip_ref:
             zip_ref.extractall(folder_helper.dats)
         Path(local_filename).unlink()
-        done += 1
-        print_progress(done)
 
     def download_dat_ia(ia: InternetArchive, download_path: str) -> None:
-        nonlocal done
         try:
-            ia.download_file(download_path, folder_helper.dats, progress, keep=total_dats == 1)
+            ia.download_file(download_path, folder_helper.dats, progress)
         except Exception as e:
             if('403' in str(e)):
                 logging.exception(
@@ -94,8 +56,6 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
             zip_ref.extractall(folder_helper.dats)
         if backup:
             move_path(local_filename, folder_helper.backup / local_filename.name)
-        done += 1
-        print_progress(done)
 
     downloader_function = download_dat_ia \
         if config.getboolean('INTERNET_ARCHIVE','IADownloadUtility', fallback=True) else download_dat_url
@@ -104,12 +64,9 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
     dats = list(ia.files_from_folder(archive.dat_folder))
     total_dats = len(dats)
 
-    def print_progress(done: int) -> None:
-        progress.update(overall, completed=done)
-
-    progress = download_progress()
-    with progress, ThreadPoolExecutor(max_workers=int(config.get('DOWNLOAD', 'Workers', fallback=10))) as executor:
-        overall = progress.add_task(f'{total_dats} DAT file(s)', total=total_dats, visible=total_dats > 1)
+    workers = int(config.get('DOWNLOAD', 'Workers', fallback=10))
+    with DownloadProgress(total=total_dats, description=f'{total_dats} DAT file(s)') as progress, \
+            ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [
             executor.submit(downloader_function, ia, file['name']) for file in dats
         ]
@@ -117,7 +74,7 @@ def download_dats(ia: InternetArchive, archive: Archive, folder_helper: Folders,
             future.result()
     remove_empty_folders(folder_helper.dats)
 
-    print('\nZipping files for backup')
+    print('Zipping files for backup')
     if not backup_to_zip:
         return
     backup_daily_name = f'{prefix}-{datetime.now(tz.tzlocal()).strftime("%Y-%m-%d")}.zip'

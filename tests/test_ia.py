@@ -1,10 +1,12 @@
-"""Tests for downloading Internet Archive files with a rich progress bar."""
+"""Tests for downloading Internet Archive files with the core download progress."""
 
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from rich.progress import Progress
+import pytest
+from datoso.configuration import config
+from datoso.helpers.download import DownloadProgress
 
 from datoso_plugin_internetarchive.ia import InternetArchive
 
@@ -28,6 +30,11 @@ class FakeItem:
                 time.sleep(self.delay)
 
 
+@pytest.fixture(autouse=True)
+def not_quiet(monkeypatch):
+    monkeypatch.setitem(config['COMMAND'], 'Quiet', 'false')
+
+
 def archive(item: FakeItem) -> InternetArchive:
     ia = InternetArchive.__new__(InternetArchive)
     ia.item = item
@@ -44,28 +51,20 @@ def test_download_without_progress(tmp_path):
 def test_progress_follows_the_file_on_disk(tmp_path):
     item = FakeItem({'pack.zip': b'0123456789' * 40}, delay=0.02)  # ~2 s, so the watcher polls mid-download
     seen = []
-    with Progress(disable=True) as progress:
-        original = progress.update
-        progress.update = lambda task, **kw: (seen.append(kw.get('completed')), original(task, **kw))[1]
+    with DownloadProgress(total=1) as progress:
+        original = progress.progress.update
+        progress.progress.update = lambda task, **kw: (seen.append(kw.get('completed')), original(task, **kw))[1]
         archive(item).download_file('pack.zip', str(tmp_path), progress)
-        [task] = progress.tasks
-        assert (task.description, task.completed, task.total, task.finished) == ('pack.zip', 400, 400, True)
-    assert any(0 < value < 400 for value in seen)  # partial sizes were shown while downloading
+        file = progress.progress.tasks[1]
+        assert (file.description, file.completed, file.total, file.finished) == ('pack.zip', 400, 400, True)
+    assert any(0 < (value or 0) < 400 for value in seen)  # partial sizes were shown while downloading
 
 
-def test_finished_task_removed_when_not_kept(tmp_path):
-    with Progress(disable=True) as progress:
-        archive(FakeItem({'a.zip': b'12345678'})).download_file('a.zip', str(tmp_path), progress, keep=False)
-        assert progress.tasks == []
+def test_finished_bars_removed_with_several_files(tmp_path):
+    item = FakeItem({'a.zip': b'12345678', 'b.zip': b'1234'})
+    with DownloadProgress(total=2) as progress:
+        for name in ('a.zip', 'b.zip'):
+            archive(item).download_file(name, str(tmp_path), progress)
+        [overall] = progress.progress.tasks
+        assert (overall.completed, overall.total) == (2, 2)
     assert (tmp_path / 'a.zip').stat().st_size == 8
-
-
-def test_progress_hidden_only_when_quiet(monkeypatch):
-    from datoso.configuration import config  # noqa: PLC0415
-
-    from datoso_plugin_internetarchive.fetch import download_progress  # noqa: PLC0415
-
-    monkeypatch.setitem(config['COMMAND'], 'Quiet', 'false')
-    assert not download_progress().disable
-    monkeypatch.setitem(config['COMMAND'], 'Quiet', 'true')
-    assert download_progress().disable

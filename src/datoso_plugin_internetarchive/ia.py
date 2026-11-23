@@ -3,10 +3,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from threading import Event, Thread
 
+from datoso.helpers.download import DownloadProgress
 from internetarchive import Item, get_item
-from rich.progress import Progress
 
 
 @dataclass
@@ -41,32 +40,14 @@ class InternetArchive:
         self.path = f'https://archive.org/download/{self.item.identifier}/'
         return self.path
 
-    def download_file(
-        self, file: str, destdir: str, progress: Progress | None = None, *, keep: bool = True,
-    ) -> None:
+    def download_file(self, file: str, destdir: str, progress: DownloadProgress | None = None) -> None:
         """Download a file of the item into destdir, showing it in ``progress`` if given."""
         if progress is None:
             self.item.download(file, no_directory=True, destdir=destdir)
             return
-        target = Path(destdir) / file
         size = self.item.get_file(file).size or None
-        task = progress.add_task(Path(file).name, total=size, file=True)
-        done = Event()
-
-        def watch() -> None:
-            while not done.wait(0.5):
-                progress.update(task, completed=target.stat().st_size if target.exists() else 0)
-
-        watcher = Thread(target=watch, daemon=True)
-        watcher.start()
-        try:
+        with progress.file(Path(file).name, total=size, watch=Path(destdir) / file):
             self.item.download(file, no_directory=True, destdir=destdir)
-        finally:
-            done.set()
-            watcher.join()
-        progress.update(task, completed=target.stat().st_size if target.exists() else 0)
-        if not keep:
-            progress.remove_task(task)
 
     @staticmethod
     def _matches_folder(file_name: str, folder: str) -> bool:
