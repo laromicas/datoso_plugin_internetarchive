@@ -39,10 +39,11 @@ class FileSizeColumn(DownloadColumn):
 
 
 def download_progress() -> Progress:
-    """Rich progress for DAT downloads: one bar per file, plus the overall count."""
+    """Rich progress for DAT downloads: one bar per file, plus the overall count. Hidden when quiet."""
     return Progress(
         TextColumn('{task.description}'), BarColumn(), TaskProgressColumn(), FileSizeColumn(), SpeedColumn(),
         TimeRemainingColumn(),
+        disable=config.getboolean('COMMAND', 'Quiet', fallback=False),
     )
 
 

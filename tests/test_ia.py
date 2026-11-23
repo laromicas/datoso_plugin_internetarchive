@@ -58,3 +58,14 @@ def test_finished_task_removed_when_not_kept(tmp_path):
         archive(FakeItem({'a.zip': b'12345678'})).download_file('a.zip', str(tmp_path), progress, keep=False)
         assert progress.tasks == []
     assert (tmp_path / 'a.zip').stat().st_size == 8
+
+
+def test_progress_hidden_only_when_quiet(monkeypatch):
+    from datoso.configuration import config  # noqa: PLC0415
+
+    from datoso_plugin_internetarchive.fetch import download_progress  # noqa: PLC0415
+
+    monkeypatch.setitem(config['COMMAND'], 'Quiet', 'false')
+    assert not download_progress().disable
+    monkeypatch.setitem(config['COMMAND'], 'Quiet', 'true')
+    assert download_progress().disable
