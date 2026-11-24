@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from datoso.helpers.download import DownloadProgress
 from internetarchive import Item, get_item
 
 
@@ -39,9 +40,14 @@ class InternetArchive:
         self.path = f'https://archive.org/download/{self.item.identifier}/'
         return self.path
 
-    def download_file(self, file: str, destdir: str) -> str:
-        """Return the download path for a file in InternetArchive item."""
-        return self.item.download(file, no_directory=True, destdir=destdir)
+    def download_file(self, file: str, destdir: str, progress: DownloadProgress | None = None) -> None:
+        """Download a file of the item into destdir, showing it in ``progress`` if given."""
+        if progress is None:
+            self.item.download(file, no_directory=True, destdir=destdir)
+            return
+        size = self.item.get_file(file).size or None
+        with progress.file(Path(file).name, total=size, watch=Path(destdir) / file):
+            self.item.download(file, no_directory=True, destdir=destdir)
 
     @staticmethod
     def _matches_folder(file_name: str, folder: str) -> bool:
